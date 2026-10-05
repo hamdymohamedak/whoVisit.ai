@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WhoVisit Demo</title>
+  </head>
+  <body>
+    <h1>WhoVisit SDK demo</h1>
+    <p>Open with query params e.g. ?utm_source=chatgpt&amp;utm_medium=ai</p>
+    <button type="button" onclick="WhoVisit.conversion({ revenue: 49 })">
+      Track conversion
+    </button>
+    <!--
+      Discord: create a webhook in channel settings → Integrations
+      Telegram: create bot via @BotFather, get chat_id via @userinfobot or getUpdates
+    -->
+    <script
+      src="http://localhost:8787/v1.js"
+      data-site="site_demo"
+      data-api="http://localhost:8787"
+      data-discord-webhook=""
+      data-telegram-bot-token=""
+      data-telegram-chat-id=""
+    ></script>
+  </body>
+</html>
