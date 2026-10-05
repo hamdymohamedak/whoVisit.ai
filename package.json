@@ -9,9 +9,11 @@
     "build": "npm run build -w @whovisit/sdk && npm run build -w @whovisit/api",
     "dev": "concurrently \"npm run dev -w @whovisit/api\" \"npm run dev -w @whovisit/dashboard\"",
     "dev:api": "pnpm --filter @whovisit/api dev",
+    "dev:host": "node examples/host-server.js",
     "db:push": "npm run db:push -w @whovisit/api"
   },
   "devDependencies": {
+    "express": "^5.1.0",
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3"
   }

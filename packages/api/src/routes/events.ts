@@ -7,7 +7,17 @@ import { classifyVisit } from "../classification/source-registry.js";
 import { db } from "../db/index.js";
 import { ensureSite, seedSourceRegistry } from "../db/seed.js";
 import { events, sessions, sites, sourceRegistry } from "../db/schema.js";
-import { sendDiscordWebhook, sendTelegram } from "../services/notify.js";
+import {
+  buildNotification,
+  dispatchVisitNotify,
+} from "../services/dispatch-notify.js";
+import { classificationFromSession } from "../services/session-attribution.js";
+import {
+  buildDeviceInfo,
+  getClientIp,
+  lookupGeo,
+} from "../services/visit-context.js";
+import { verifyEventAuth } from "../middleware/auth.js";
 
 const eventSchema = z.object({
   event: z.string(),
@@ -21,9 +31,16 @@ const eventSchema = z.object({
   }),
   referrer: z.string().optional().default(""),
   utm: z.record(z.string()).optional().default({}),
+  hints: z
+    .object({
+      ref: z.string().optional(),
+      via: z.string().optional(),
+    })
+    .optional(),
   device: z.record(z.string()).optional(),
   revenue: z.number().optional(),
   value: z.number().optional(),
+  discordWebhook: z.string().url().optional(),
 });
 
 function loadRegistry(): Record<string, { category: "ai" | "search" | "social" | "referral" | "direct" | "unknown" | "paid"; platform: string }> {
@@ -48,16 +65,37 @@ eventsRoute.post("/events", async (c) => {
   const data = parsed.data;
   ensureSite(data.siteId);
 
+  const apiKeyHeader =
+    c.req.header("x-whovisit-key") ||
+    c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!verifyEventAuth(data.siteId, apiKeyHeader)) {
+    return c.json({ error: "Invalid API key for site" }, 403);
+  }
+
+  if (data.discordWebhook) {
+    db.update(sites)
+      .set({ discordWebhook: data.discordWebhook })
+      .where(eq(sites.id, data.siteId))
+      .run();
+  }
+
   const userAgent = c.req.header("user-agent") || "";
+  const utm = { ...data.utm };
+  if (!utm.source && data.hints?.via) utm.source = data.hints.via;
+  if (!utm.source && data.hints?.ref) utm.source = data.hints.ref;
+
   const classification = classifyVisit({
     referrer: data.referrer,
-    utm: data.utm,
+    utm,
     userAgent,
     registry: loadRegistry(),
   });
 
   const parser = new UAParser(userAgent);
   const deviceType = parser.getDevice().type || "desktop";
+  const clientIp = getClientIp(c);
+  const geo = lookupGeo(clientIp);
+  const deviceInfo = buildDeviceInfo(parser, data.device);
 
   const eventId = nanoid();
   db.insert(events)
@@ -102,6 +140,7 @@ eventsRoute.post("/events", async (c) => {
         sourcePlatform: classification.sourcePlatform,
         confidence: classification.confidence,
         landingPage: data.page.path,
+        country: geo.countryName ?? geo.country,
         deviceType,
         converted: isConversion,
         revenue: isConversion ? revenue : 0,
@@ -119,22 +158,38 @@ eventsRoute.post("/events", async (c) => {
   }
 
   const site = db.select().from(sites).where(eq(sites.id, data.siteId)).get();
-  if (site && (data.event === "page_view" || data.event === "session_start")) {
-    const notification = {
-      siteId: data.siteId,
-      eventType: data.event,
-      pagePath: data.page.path,
-      classification,
-      referrer: data.referrer,
-    };
-    if (site.discordWebhook) {
-      sendDiscordWebhook(site.discordWebhook, notification).catch(() => {});
-    }
-    if (site.telegramBotToken && site.telegramChatId) {
-      sendTelegram(site.telegramBotToken, site.telegramChatId, notification).catch(
-        () => {}
-      );
-    }
+  const sessionRow = db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.id, data.sessionId))
+    .get();
+
+  if (site && sessionRow) {
+    const notifyClassification =
+      data.event === "conversion"
+        ? classificationFromSession(sessionRow)
+        : classification;
+    const totalRevenue =
+      data.event === "conversion" ? (sessionRow.revenue ?? revenue) : undefined;
+
+    dispatchVisitNotify({
+      site,
+      discordWebhookOverride: data.discordWebhook,
+      sourceCategory: notifyClassification.sourceCategory,
+      confidence: notifyClassification.confidence,
+      notification: buildNotification({
+        siteId: data.siteId,
+        eventType: data.event,
+        pagePath: data.page.path,
+        pageUrl: data.page.url,
+        classification: notifyClassification,
+        referrer: data.referrer,
+        utm: data.utm,
+        geo,
+        device: deviceInfo,
+        revenue: totalRevenue,
+      }),
+    });
   }
 
   return c.json({
@@ -154,6 +209,9 @@ const notifyConfigSchema = z.object({
   discordWebhook: z.string().url().optional(),
   telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
+  notifyAiOnly: z.boolean().optional(),
+  notifyMinConfidence: z.enum(["low", "medium", "high"]).optional(),
+  notifyConversions: z.boolean().optional(),
 });
 
 eventsRoute.post("/notify-config", async (c) => {
@@ -163,13 +221,27 @@ eventsRoute.post("/notify-config", async (c) => {
     return c.json({ error: parsed.error.flatten() }, 400);
   }
   ensureSite(parsed.data.siteId);
-  db.update(sites)
-    .set({
-      discordWebhook: parsed.data.discordWebhook ?? null,
-      telegramBotToken: parsed.data.telegramBotToken ?? null,
-      telegramChatId: parsed.data.telegramChatId ?? null,
-    })
-    .where(eq(sites.id, parsed.data.siteId))
-    .run();
+  const patch: Record<string, unknown> = {};
+  if (parsed.data.discordWebhook !== undefined) {
+    patch.discordWebhook = parsed.data.discordWebhook ?? null;
+  }
+  if (parsed.data.telegramBotToken !== undefined) {
+    patch.telegramBotToken = parsed.data.telegramBotToken ?? null;
+  }
+  if (parsed.data.telegramChatId !== undefined) {
+    patch.telegramChatId = parsed.data.telegramChatId ?? null;
+  }
+  if (parsed.data.notifyAiOnly !== undefined) {
+    patch.notifyAiOnly = parsed.data.notifyAiOnly;
+  }
+  if (parsed.data.notifyMinConfidence !== undefined) {
+    patch.notifyMinConfidence = parsed.data.notifyMinConfidence;
+  }
+  if (parsed.data.notifyConversions !== undefined) {
+    patch.notifyConversions = parsed.data.notifyConversions;
+  }
+  if (Object.keys(patch).length > 0) {
+    db.update(sites).set(patch).where(eq(sites.id, parsed.data.siteId)).run();
+  }
   return c.json({ ok: true });
 });

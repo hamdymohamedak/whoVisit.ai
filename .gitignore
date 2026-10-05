@@ -1,6 +1,8 @@
 node_modules
 dist
 data
+examples/host-data
+examples/host-settings.json
 *.db
 .env
 .DS_Store

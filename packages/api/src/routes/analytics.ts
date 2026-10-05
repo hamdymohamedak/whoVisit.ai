@@ -64,6 +64,32 @@ analyticsRoute.get("/analytics/:siteId/summary", (c) => {
     .groupBy(sessions.sourceCategory, sessions.sourcePlatform)
     .all();
 
+  const byCountry = db
+    .select({
+      country: sessions.country,
+      count: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(sessions)
+    .where(eq(sessions.siteId, siteId))
+    .groupBy(sessions.country)
+    .orderBy(sql`count(*) desc`)
+    .limit(15)
+    .all();
+
+  const funnel = db
+    .select({
+      sourceCategory: sessions.sourceCategory,
+      sessions: sql<number>`count(*)`.mapWith(Number),
+      conversions: sql<number>`sum(case when ${sessions.converted} then 1 else 0 end)`.mapWith(
+        Number
+      ),
+      revenue: sql<number>`coalesce(sum(${sessions.revenue}), 0)`.mapWith(Number),
+    })
+    .from(sessions)
+    .where(eq(sessions.siteId, siteId))
+    .groupBy(sessions.sourceCategory)
+    .all();
+
   const total = byCategory.reduce((a, r) => a + r.count, 0);
 
   return c.json({
@@ -74,6 +100,8 @@ analyticsRoute.get("/analytics/:siteId/summary", (c) => {
     aiCrawlers,
     aiLandingPages: topLanding,
     conversionAttribution: conversions,
+    byCountry,
+    funnelByCategory: funnel,
   });
 });
 

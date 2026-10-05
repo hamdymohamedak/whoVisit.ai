@@ -1,0 +1,23 @@
+{
+  "mountPath": "/whovisit",
+  "backendUrl": "https://api.your-domain.com",
+  "site": {
+    "id": "my_website",
+    "name": "My Website",
+    "apiKey": ""
+  },
+  "notify": {
+    "discordWebhook": "",
+    "telegramBotToken": "",
+    "telegramChatId": "",
+    "aiOnly": false,
+    "minConfidence": "low",
+    "conversions": true
+  },
+  "database": {
+    "path": "./data/whovisit.db"
+  },
+  "tracking": {
+    "autoPageView": true
+  }
+}

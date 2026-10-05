@@ -19,7 +19,12 @@ export interface ClassificationResult {
   confidenceScore: number;
   searchQuery: string | null;
   botName: string | null;
-  subtype?: "ai_crawler" | "search_crawler" | "other_bot" | "ai_recommendation";
+  subtype?:
+    | "ai_crawler"
+    | "search_crawler"
+    | "other_bot"
+    | "ai_recommendation"
+    | "estimated_ai";
 }
 
 /** Default registry — also seeded in DB for server-side updates without SDK release */
@@ -204,6 +209,18 @@ export function classifyVisit(input: {
         searchQuery: null,
         botName: null,
         subtype: "ai_recommendation",
+      };
+    }
+    if (utmMedium === "ai" || utmSource === "ai") {
+      return {
+        trafficKind: "human",
+        sourceCategory: "ai",
+        sourcePlatform: utmSource || "estimated",
+        confidence: "low",
+        confidenceScore: 0.45,
+        searchQuery: null,
+        botName: null,
+        subtype: "estimated_ai",
       };
     }
     return {

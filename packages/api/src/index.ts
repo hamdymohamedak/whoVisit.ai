@@ -1,59 +1,22 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { db } from "./db/index.js";
-import { seedSourceRegistry } from "./db/seed.js";
-import { eventsRoute } from "./routes/events.js";
-import { analyticsRoute } from "./routes/analytics.js";
-import { redirectRoute } from "./routes/redirect.js";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { buildWhoVisitApp } from "./app.js";
+import {
+  applySettingsOnBoot,
+  loadSettings,
+  resolveDatabasePath,
+} from "./settings.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = join(__dirname, "../drizzle");
+const settingsPath = process.env.WHOVISIT_SETTINGS;
+const settings = loadSettings(settingsPath);
 
-const app = new Hono();
-
-app.use(
-  "*",
-  cors({
-    origin: "*",
-    allowMethods: ["GET", "POST", "OPTIONS"],
-  })
-);
-
-app.route("/v1", eventsRoute);
-app.route("/v1", analyticsRoute);
-app.route("/v1", redirectRoute);
-
-app.get("/health", (c) => c.json({ ok: true }));
-
-const sdkPath = join(__dirname, "../../sdk/dist/v1.js");
-app.get("/v1.js", (c) => {
-  if (!existsSync(sdkPath)) {
-    return c.text("SDK not built. Run npm run build -w @whovisit/sdk", 503);
-  }
-  const js = readFileSync(sdkPath, "utf-8");
-  return c.body(js, 200, {
-    "Content-Type": "application/javascript",
-    "Cache-Control": "public, max-age=300",
-  });
-});
-
-function initDb() {
-  try {
-    if (existsSync(migrationsFolder)) {
-      migrate(db, { migrationsFolder });
-    }
-  } catch {
-    // tables created via push
-  }
-  seedSourceRegistry();
+if (settingsPath) {
+  process.env.DATABASE_URL = resolveDatabasePath(settingsPath, settings);
 }
 
-initDb();
+const apiKey =
+  applySettingsOnBoot(settings, settingsPath) ?? settings.site.apiKey ?? "";
+
+const app = buildWhoVisitApp(settings, apiKey);
 
 const port = Number(process.env.PORT || 8787);
 console.log(`WhoVisit API http://localhost:${port}`);

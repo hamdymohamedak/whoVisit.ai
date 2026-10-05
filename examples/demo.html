@@ -6,21 +6,42 @@
   </head>
   <body>
     <h1>WhoVisit SDK demo</h1>
-    <p>Open with query params e.g. ?utm_source=chatgpt&amp;utm_medium=ai</p>
+    <p>
+      Try:
+      <a href="/demo?utm_source=chatgpt&amp;utm_medium=ai">AI UTM visit</a>
+    </p>
     <button type="button" onclick="WhoVisit.conversion({ revenue: 49 })">
       Track conversion
     </button>
+    <button type="button" onclick="WhoVisit.getConfig().then(console.log)">
+      Log config (needs data-key)
+    </button>
+    <button
+      type="button"
+      onclick="WhoVisit.createLink({ targetUrl: location.origin + '/demo', sourcePlatform: 'chatgpt', label: 'demo' }).then(alert)"
+    >
+      Create attribution link
+    </button>
+    <pre id="help" style="background:#eee;padding:1rem;font-size:12px"></pre>
     <!--
-      Discord: create a webhook in channel settings → Integrations
-      Telegram: create bot via @BotFather, get chat_id via @userinfobot or getUpdates
+      1) Register site (once): fetch POST /v1/site/register { "siteId": "site_demo" }
+      2) Put apiKey in data-key below
+      3) Or: await WhoVisit.register('site_demo') in console
     -->
     <script
       src="http://localhost:8787/v1.js"
       data-site="site_demo"
       data-api="http://localhost:8787"
+      data-key=""
       data-discord-webhook=""
-      data-telegram-bot-token=""
-      data-telegram-chat-id=""
+      data-notify-ai-only="false"
+      data-notify-min-confidence="low"
     ></script>
+    <script>
+      document.getElementById("help").textContent =
+        "WhoVisit API v" +
+        WhoVisit.version +
+        "\\n\\nConsole:\\n  await WhoVisit.register('site_demo')\\n  await WhoVisit.configure({ notify: { aiOnly: true }})\\n  await WhoVisit.createLink({ targetUrl: 'https://yoursite.com/pricing', sourcePlatform: 'chatgpt' })";
+    </script>
   </body>
 </html>

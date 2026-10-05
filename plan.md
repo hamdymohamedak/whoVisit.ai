@@ -14,11 +14,15 @@
 - [x] Attribution links `/v1/r/:id` + UTM تلقائي
 - [x] Analytics API + Dashboard (AI sources, crawlers, conversions)
 - [ ] PostgreSQL production (حالياً SQLite للتطوير المحلي)
-- [ ] IP-derived metadata / country
+- [x] IP-derived metadata / country (GeoIP + Discord Visitor block)
+- [x] إشعار conversion + revenue على Discord/Telegram
+- [x] فلتر إشعارات: `data-notify-ai-only`, `data-notify-min-confidence`
+- [x] Dashboard: countries + funnel by channel
 - [ ] AI Visibility Score (42/81/… — تقديري)
 - [ ] Probabilistic AI fingerprinting (Estimated AI Traffic)
 - [ ] Source Discovery UI لإضافة domains جديدة
-- [ ] Auth multi-tenant + CDN production
+- [x] Auth API key (`data-key`) + `WhoVisit.configure` / links / summary
+- [ ] Auth multi-tenant (accounts) + CDN production
 
 ---
 

@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { db } from "./index.js";
 import { sourceRegistry, sites } from "./schema.js";
 import { DEFAULT_SOURCE_REGISTRY } from "../classification/source-registry.js";
@@ -30,4 +31,16 @@ export function ensureSite(siteId: string) {
       })
       .run();
   }
+}
+
+export function createSiteWithKey(siteId: string, name?: string) {
+  ensureSite(siteId);
+  const existing = db.select().from(sites).where(eq(sites.id, siteId)).get();
+  if (existing?.apiKey) return existing.apiKey;
+  const apiKey = `wv_${nanoid(24)}`;
+  db.update(sites)
+    .set({ apiKey, name: name ?? siteId })
+    .where(eq(sites.id, siteId))
+    .run();
+  return apiKey;
 }

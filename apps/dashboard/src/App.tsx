@@ -14,20 +14,43 @@ type Summary = {
     signups: number;
     revenue: number;
   }[];
+  byCountry: { country: string | null; count: number }[];
+  funnelByCategory: {
+    sourceCategory: string | null;
+    sessions: number;
+    conversions: number;
+    revenue: number;
+  }[];
 };
 
 export function App() {
   const [siteId, setSiteId] = useState(
     () => localStorage.getItem("wv_site") || "site_demo"
   );
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem("wv_api_key") || ""
+  );
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [links, setLinks] = useState<
+    { id: string; url: string; targetUrl: string; hits: number | null }[]
+  >([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("https://example.com/pricing");
+  const [linkPlatform, setLinkPlatform] = useState("chatgpt");
+
+  const authHeaders = useCallback((): Record<string, string> => {
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (siteId) h["X-WhoVisit-Site"] = siteId;
+    if (apiKey) h["X-WhoVisit-Key"] = apiKey;
+    return h;
+  }, [siteId, apiKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     localStorage.setItem("wv_site", siteId);
+    localStorage.setItem("wv_api_key", apiKey);
     try {
       const res = await fetch(`/v1/analytics/${encodeURIComponent(siteId)}/summary`);
       if (!res.ok) throw new Error(await res.text());
@@ -38,7 +61,45 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [siteId, apiKey]);
+
+  const loadLinks = useCallback(async () => {
+    if (!apiKey) return;
+    const res = await fetch("/v1/site/links", { headers: authHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      setLinks(data.links ?? []);
+    }
+  }, [apiKey, authHeaders]);
+
+  const createLink = async () => {
+    const res = await fetch("/v1/site/links", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        targetUrl: linkUrl,
+        sourcePlatform: linkPlatform,
+      }),
+    });
+    if (!res.ok) {
+      setError(await res.text());
+      return;
+    }
+    await loadLinks();
+  };
+
+  const registerSite = async () => {
+    const res = await fetch("/v1/site/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteId }),
+    });
+    const data = await res.json();
+    if (data.apiKey) {
+      setApiKey(data.apiKey);
+      localStorage.setItem("wv_api_key", data.apiKey);
+    }
+  };
 
   const humanAi =
     summary?.aiPlatforms.reduce((a, r) => a + r.count, 0) ?? 0;
@@ -59,6 +120,16 @@ export function App() {
           placeholder="Site ID (data-site)"
           aria-label="Site ID"
         />
+        <input
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="API key (data-key)"
+          aria-label="API key"
+          type="password"
+        />
+        <button type="button" onClick={registerSite}>
+          Register / get key
+        </button>
         <button type="button" onClick={load} disabled={loading}>
           {loading ? "Loading…" : "Refresh"}
         </button>
@@ -117,6 +188,64 @@ export function App() {
                 </div>
               ))}
             </div>
+
+            <div className="card">
+              <h2>Countries (sessions)</h2>
+              {(summary.byCountry ?? []).length === 0 && (
+                <p className="muted">No geo data yet</p>
+              )}
+              {(summary.byCountry ?? []).map((r) => (
+                <div className="stat-row" key={r.country ?? "unknown"}>
+                  <span>{r.country ?? "Unknown"}</span>
+                  <span>{r.count}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="card">
+              <h2>Funnel by channel</h2>
+              {(summary.funnelByCategory ?? []).map((r) => {
+                const rate =
+                  r.sessions > 0
+                    ? ((r.conversions / r.sessions) * 100).toFixed(1)
+                    : "0";
+                return (
+                  <div className="stat-row" key={r.sourceCategory ?? "?"}>
+                    <span>
+                      {r.sourceCategory ?? "?"} · {rate}% conv
+                    </span>
+                    <span>
+                      {r.conversions}/{r.sessions}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card" style={{ marginTop: "1rem" }}>
+            <h2>Attribution links</h2>
+            <p className="muted">Requires API key — same as WhoVisit.createLink()</p>
+            <div className="toolbar" style={{ marginBottom: "0.75rem" }}>
+              <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
+              <input
+                value={linkPlatform}
+                onChange={(e) => setLinkPlatform(e.target.value)}
+                placeholder="chatgpt"
+              />
+              <button type="button" onClick={createLink}>
+                Create link
+              </button>
+              <button type="button" onClick={loadLinks}>
+                List links
+              </button>
+            </div>
+            {links.map((l) => (
+              <div className="stat-row" key={l.id}>
+                <span>{l.url}</span>
+                <span>{l.hits ?? 0} hits</span>
+              </div>
+            ))}
           </div>
 
           <div className="card" style={{ marginTop: "1rem" }}>

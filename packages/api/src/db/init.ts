@@ -60,4 +60,18 @@ export function ensureTables(sqlite: Database.Database) {
       created_at TEXT NOT NULL
     );
   `);
+
+  const alters = [
+    "ALTER TABLE sites ADD COLUMN notify_ai_only INTEGER DEFAULT 0",
+    "ALTER TABLE sites ADD COLUMN notify_min_confidence TEXT",
+    "ALTER TABLE sites ADD COLUMN notify_conversions INTEGER DEFAULT 1",
+    "ALTER TABLE sites ADD COLUMN api_key TEXT",
+  ];
+  for (const sql of alters) {
+    try {
+      sqlite.exec(sql);
+    } catch {
+      /* column exists */
+    }
+  }
 }

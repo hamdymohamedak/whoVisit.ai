@@ -3,9 +3,15 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 export const sites = sqliteTable("sites", {
   id: text("id").primaryKey(),
   name: text("name"),
+  apiKey: text("api_key"),
   discordWebhook: text("discord_webhook"),
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
+  notifyAiOnly: integer("notify_ai_only", { mode: "boolean" }).default(false),
+  notifyMinConfidence: text("notify_min_confidence"),
+  notifyConversions: integer("notify_conversions", { mode: "boolean" }).default(
+    true
+  ),
   createdAt: text("created_at").notNull(),
 });
 
